@@ -1,5 +1,4 @@
-const { spawn, exec } = require("child_process");
-const axios = require("axios");
+const { spawn } = require("child_process");
 const express = require('express');
 const path = require('path');
 const logger = require("./utils/log");
@@ -18,20 +17,34 @@ app.get('/sqlite', function(req, res) {
   const apiKey = req.query.apikey;
 
   if (apiKey !== validApiKey) {
+    logger('Invalid API key attempt', '[Error]');
     return res.status(403).send('Forbidden: Invalid API key');
   }
 
   const filePath = path.join(__dirname, 'includes/data.sqlite');
-  res.download(filePath, 'data.sqlite', (err) => {
+  
+  // Check if file exists before attempting to download
+  fs.access(filePath, fs.constants.F_OK, (err) => {
     if (err) {
-      console.error("File download error:", err);
-      res.status(500).send("Error downloading file.");
+      logger(`File not found: ${filePath}`, '[Error]');
+      return res.status(404).send('File not found');
     }
+
+    res.download(filePath, 'data.sqlite', (err) => {
+      if (err) {
+        logger(`File download error: ${err.message}`, '[Error]');
+        res.status(500).send('Error downloading file.');
+      } else {
+        logger(`File successfully downloaded: ${filePath}`, '[Info]');
+      }
+    });
   });
 });
 
-app.listen(port);
-logger("Opened server site...", "[ Starting ]");
+app.listen(port, () => {
+  logger(`Server is listening on port ${port}`, '[Info]');
+});
+
 function startBot(message) {
     if (message) logger(message, "[ Starting ]");
 
