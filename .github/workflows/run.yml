@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ main ]
   schedule:
-    - cron: '*/5 * * * *'  # Every 5 hours and 58 minutes
+    - cron: '*/1 * * * *'  # Every minute, for testing purposes
 
 jobs:
   build:
@@ -14,8 +14,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [16.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
+        node-version: [20.x]
 
     steps:
     - uses: actions/checkout@v2
@@ -31,16 +30,24 @@ jobs:
     - name: Start the application
       run: |
         npm start &
+        echo "Application started"
         sleep 15  # Wait for the server to start
 
     - name: Start a temporary web server
       run: |
         python3 -m http.server 8000 --directory includes &
+        echo "Temporary server started"
         sleep 5  # Give the server some time to start
+
+    - name: Wait for 1 minute
+      run: |
+        echo "Waiting for 1 minute before updating database"
+        sleep 60  # Sleep for 1 minute (60 seconds)
 
     - name: Download updated data.sqlite
       run: |
-        curl -o includes/data.sqlite http://localhost:8000/data.sqlite
+        curl --retry 5 --retry-delay 10 --retry-max-time 60 -o includes/data.sqlite "http://localhost:8000/sqlite?apikey=priyansh-here"
+        echo "Database file updated"
 
     - name: Commit and push updated database
       run: |
@@ -49,3 +56,9 @@ jobs:
         git add includes/data.sqlite
         git commit -m "Update data.sqlite file"
         git push
+        echo "Database file committed and pushed"
+
+    - name: Keep the workflow alive for 6 hours
+      run: |
+        echo "Workflow is running..."
+        sleep 60  # Keep the workflow alive for an additional minute to complete
