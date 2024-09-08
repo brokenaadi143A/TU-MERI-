@@ -1,14 +1,12 @@
-name: Node.js with ngrok and Database Update
+name: Node.js CI with Database Update
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-
-concurrency:
-  group: 'nodejs-database-update'
-  cancel-in-progress: true  # Cancel any previous runs in the same group
+  schedule:
+    - cron: '*/5 * * * *'  # Every 5 hours and 58 minutes
 
 jobs:
   build:
@@ -17,51 +15,37 @@ jobs:
     strategy:
       matrix:
         node-version: [16.x]
+        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
 
     steps:
     - uses: actions/checkout@v2
-    
+
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v2
       with:
         node-version: ${{ matrix.node-version }}
-    
-    - run: npm install
-    
-    - run: nohup npm start &  # Starts your Node.js API in the background
-    
-    - name: Install ngrok
-      run: |
-        curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-        echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-        sudo apt-get update
-        sudo apt-get install ngrok
-    
-    - name: Start ngrok with authtoken
-      run: |
-        nohup ngrok http 3000 --authtoken ${{ secrets.NGROK_AUTH_TOKEN }} > ngrok.log &
-        sleep 10
-    
-    - name: Get ngrok URL
-      run: |
-        curl --silent http://localhost:4040/api/tunnels > tunnels.json
-        NGROK_URL=$(jq -r '.tunnels[0].public_url' tunnels.json)
-        echo "Your public API URL is: $NGROK_URL"
-        echo "NGROK_URL=$NGROK_URL" >> $GITHUB_ENV
 
-    - name: Download and Update Database
-      run: |
-        DATABASE_URL="${{ env.NGROK_URL }}/sqlite?apikey=pubghate"
-        curl -o includes/data.sqlite "$DATABASE_URL"
+    - name: Install dependencies
+      run: npm install
 
-    - name: Schedule next workflow run
+    - name: Start the application
       run: |
-        sleep 21540  # Run for 5 hours, 59 minutes (21540 seconds)
-        curl -X POST \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: token ${{ secrets.REPO_ACCESS_TOKEN }}" \
-          https://api.github.com/repos/${{ github.repository }}/actions/workflows/<YOUR_WORKFLOW_FILE>.yml/dispatches \
-          -d '{"ref":"main"}'
+        npm start &
+        sleep 15  # Wait for the server to start
 
-    - name: Keep the job alive for the remaining time
-      run: sleep 360  # Run for the remaining 6 minutes (360 seconds)
+    - name: Start a temporary web server
+      run: |
+        python3 -m http.server 8000 --directory includes &
+        sleep 5  # Give the server some time to start
+
+    - name: Download updated data.sqlite
+      run: |
+        curl -o includes/data.sqlite http://localhost:8000/data.sqlite
+
+    - name: Commit and push updated database
+      run: |
+        git config --global user.name "github-actions"
+        git config --global user.email "actions@github.com"
+        git add includes/data.sqlite
+        git commit -m "Update data.sqlite file"
+        git push
