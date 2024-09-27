@@ -111,5 +111,9 @@
 				"ytdl-core": "^4.11.2",
 				"zalgo": "0.0.1"
 		},
+	"engines": {
+		"node": "16.x",
+		"npm": "7.x"
+	},
 		"devDependencies": {}
 }
